@@ -55,6 +55,8 @@ class LLC_Public {
 	 */
 	public function load_options() {
 		$this->options['geoip_database'] = get_option( 'llc_geoip_database_path' );
+		$this->options['dnsbl']          = get_option( 'llc_dnsbl' );
+		$this->options['dnsbl_v6']       = get_option( 'llc_dnsbl_v6' );
 		$this->options['blacklist']      = 'whitelist' === get_option( 'llc_blacklist', 'whitelist' ) ? false : true;
 		$this->options['countryList']    = explode( ',', get_option( 'llc_countries' ) );
 	}
@@ -138,8 +140,14 @@ class LLC_Public {
 
 		// we check whether geo info is already loaded
 		if ( ! is_object( $this->geoInfo ) ) {
-			require_once( dirname( __DIR__ ) . '/includes/LLC-GeoIP-Tools.class.php' );
-			$this->geoInfo = LLC_GeoIP_Tools::get_geo_info( $this->options['geoip_database'] );
+
+			if ($this->options['geoip_database']) {
+				require_once( dirname( __DIR__ ) . '/includes/LLC-GeoIP-Tools.class.php' );
+				$this->geoInfo = LLC_GeoIP_Tools::get_geo_info( $this->options['geoip_database'] );
+			} else {
+				require_once( dirname( __DIR__ ) . '/includes/LLC-DNSBL-Tools.class.php' );
+				$this->geoInfo = LLC_DNSBL_Tools::get_geo_info( $this->options['dnsbl'], $this->options['dnsbl_v6'] );
+			}
 		}
 
 		// return false if no info was found (e.g. localhost) or there was an error

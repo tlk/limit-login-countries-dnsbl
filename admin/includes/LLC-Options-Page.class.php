@@ -30,22 +30,6 @@ class LLC_Options_Page {
 	 * @since 0.3
 	 */
 	public static function check_settings() {
-
-		// check only if not just submitted
-		if ( ! isset( $_GET['settings-updated'] ) and ! isset( $_POST['llc_geoip_database_path'] ) ) {
-			// check llc_database_path
-			$db_path = get_option( 'llc_geoip_database_path' );
-			require_once( __DIR__ . '/../../includes/LLC-GeoIP-Tools.class.php' );
-			if ( ! LLC_GeoIP_Tools::is_valid_geoip_database( $db_path, $errmsg ) ) {
-				global $pagenow;
-				if ( 'options-general.php' === $pagenow and isset( $_GET['page'] ) and 'limit-login-countries' === $_GET['page'] ) {
-					add_settings_error( 'llc_geoip_database_path', 'geoip-database-not-existent', $errmsg );
-				} else {
-					require_once( __DIR__ . '/../../includes/LLC-Admin-Notice.class.php' );
-					LLC_Admin_Notice::add_notice( $errmsg . ' ' . self::get_link(), 'error' );
-				}
-			}
-		}
 		// TODO: check if admin will be locked out after logout
 	}
 
@@ -72,21 +56,15 @@ class LLC_Options_Page {
 	public static function register_settings() {
 
 		// we register all our settings
-		register_setting( 'limit-login-countries', 'llc_geoip_database_path', array(
-			'LLC_Options_PAGE',
-			'geoip_database_path_validate',
-		) );
 		register_setting( 'limit-login-countries', 'llc_blacklist', array( 'LLC_Options_PAGE', 'blacklist_validate' ) );
 		register_setting( 'limit-login-countries', 'llc_countries', array( 'LLC_Options_PAGE', 'countries_validate' ) );
+		register_setting( 'limit-login-countries', 'llc_dnsbl', array( 'LLC_Options_PAGE', 'dnsbl_validate' ) );
+		register_setting( 'limit-login-countries', 'llc_dnsbl_v6', array( 'LLC_Options_PAGE', 'dnsbl_validate' ) );
 
 		// we add settings sections
 		add_settings_section( 'llc-general', __( 'General Settings', 'limit-login-countries' ), array(
 			'LLC_Options_Page',
 			'general_settings_callback',
-		), 'limit-login-countries' );
-		add_settings_section( 'llc-geoip', __( 'GeoIP Database', 'limit-login-countries' ), array(
-			'LLC_Options_Page',
-			'geoip_settings_callback',
 		), 'limit-login-countries' );
 
 		// we add settings to our settings sections
@@ -106,10 +84,14 @@ class LLC_Options_Page {
 			'countries_callback',
 		), 'limit-login-countries', 'llc-general', array( 'label_for' => 'llc_countries' ) );
 
-		add_settings_field( 'llc_geoip_database_path', __( 'GeoIP database file:', 'limit-login-countries' ), array(
+		add_settings_field( 'llc_dnsbl', __( 'DNSBL:', 'limit-login-countries' ), array(
 			'LLC_Options_Page',
-			'geoip_database_path_callback',
-		), 'limit-login-countries', 'llc-geoip', array( 'label_for' => 'llc_geoip_database_path' ) );
+			'dnsbl_callback',
+		), 'limit-login-countries', 'llc-general', array( 'label_for' => 'llc_dnsbl' ) );
+		add_settings_field( 'llc_dnsbl_v6', __( 'DNSBL (ipv6):', 'limit-login-countries' ), array(
+			'LLC_Options_Page',
+			'dnsbl_v6_callback',
+		), 'limit-login-countries', 'llc-general', array( 'label_for' => 'llc_dnsbl_v6' ) );
 	}
 
 	public static function general_settings_callback() {
@@ -118,65 +100,6 @@ class LLC_Options_Page {
 		$r .= '<p><em>' . sprintf( __( '<strong>Remember:</strong> In case you lock yourself out of WP\'s admin area you can disable the country check by adding %s to your <code>wp-config.php</code> file.', 'limit-login-countries' ), '<code>define(\'LIMIT_LOGIN_COUNTRIES_OVERRIDE\', TRUE);</code>' ) . '</em></p>';
 
 		echo $r;
-	}
-
-	public static function geoip_settings_callback() {
-
-		$r = '<p>' . sprintf( __( 'This plugin works with <a href="%1$s" target="_blank">Maxmind\'s GeoIP database</a>. If you are not a paying customer, you can download a lite version for free: <a href="%2$s" title="Direct Download">Download Maxmind\'s GeoIP Lite database</a>.', 'limit-login-countries' ), 'http://dev.maxmind.com/geoip/', 'http://geolite.maxmind.com/download/geoip/database/GeoLiteCity.dat.gz' ) . '</p>';
-
-		echo $r;
-	}
-
-	public static function geoip_database_path_callback() {
-
-		$geoip_database_path = get_option( 'llc_geoip_database_path' );
-
-		$setting = esc_attr( $geoip_database_path );
-		echo "<input type='text' id='llc_geoip_database_path' name='llc_geoip_database_path' value='$setting' size='60' />";
-
-		require_once( __DIR__ . '/../../includes/LLC-GeoIP-Tools.class.php' );
-		if ( LLC_GeoIP_Tools::is_valid_geoip_database( $geoip_database_path, $msg ) ) {
-			$dashicon = 'dashicons-yes';
-			$color    = '#7ad03a';
-		} else {
-			$dashicon = 'dashicons-no';
-			$color    = '#dd3d36';
-		}
-		echo sprintf( '<p><span style="color:%2$s;font-size:20px;" class="dashicons %3$s" title="%1$s"></span>&nbsp;<em>%1$s</em><br><br></p>', $msg, $color, $dashicon );
-
-		if ( '' === $setting ) {
-			require_once( dirname( dirname( __DIR__ ) ) . '/includes/LLC-GeoIP-Tools.class.php' );
-			$gds = LLC_GeoIP_Tools::search_geoip_database();
-			echo '<p>' . __( 'For your convenience we tried to find a database file.', 'limit-login-countries' ) . '</p>';
-			if ( count( $gds ) > 0 ) {
-				echo '<ul>';
-				foreach ( $gds as $gd ) {
-					echo '<li><code>' . $gd['filepath'] . '</code>, published ' . date( 'd. M Y', $gd['publish_date'] ) . '.</li>';
-				}
-				echo '</ul>';
-			} else {
-				echo '<p>' . __( 'Unfortunately we couldn\'t find any database file.<br/>If you are sure you uploaded (and unzipped) one, it is probably just named differently from what we expected. No worries, just enter the correct absolute path to your database file above and we are all fine.', 'limit-login-countries' ) . '</p>';
-			}
-		}
-	}
-
-	public static function geoip_database_path_validate( $new_db_path ) {
-
-		$current_db_path = get_option( 'llc_geoip_database_path' );
-		require_once( __DIR__ . '/../../includes/LLC-GeoIP-Tools.class.php' );
-		if ( ! LLC_GeoIP_Tools::is_valid_geoip_database( $new_db_path, $errmsg ) ) {
-			add_settings_error( 'llc_geoip_database_path', 'geoip-database-not-existent', $errmsg );
-			if ( LLC_GeoIP_Tools::is_valid_geoip_database( $current_db_path ) ) {
-				return $current_db_path;
-			} elseif ( ! empty( $new_db_path ) ) {
-				return $new_db_path;
-			} else {
-				return '';
-			}
-		} else {
-
-			return $new_db_path;
-		}
 	}
 
 	public static function blacklist_callback() {
@@ -254,6 +177,24 @@ class LLC_Options_Page {
 		return implode( ',', $output );
 	}
 
+	public static function dnsbl_validate( $input ) {
+		// TODO
+		return $input;
+	}
+
+	public static function dnsbl_callback() {
+		//$dnsbl = esc_attr(get_option( 'llc_dnsbl', 'zz.countries.nerd.dk' )); zz.countries.nerd.dk returns "UK" instead of "GB"
+		$dnsbl = esc_attr(get_option( 'llc_dnsbl', 'all.ascc.dnsbl.bit.nl' ));
+		echo '<input id=llc_dnsbl name=llc_dnsbl type=text value="'.$dnsbl.'" size=60>';
+	}
+
+	public static function dnsbl_v6_callback() {
+		$dnsbl = esc_attr(get_option( 'llc_dnsbl_v6', 'all.v6.ascc.dnsbl.bit.nl' ));
+		echo '<input id=llc_dnsbl_v6 name=llc_dnsbl_v6 type=text value="'.$dnsbl.'" size=60>';
+	}
+
+
+
 	/**
 	 * Adds our options page to the admin area.
 	 * Callback function for WP's hook 'admin_menu'.
@@ -294,7 +235,7 @@ class LLC_Options_Page {
 			<h2><?php
 				echo __( 'Settings', 'limit-login-countries' ) . '&nbsp;&rsaquo;&nbsp;';
 				// translators: This translation of the plugin name is used as the title of the plugin's settings page in the WordPress Admin area
-				echo __( 'Limit Login Countries', 'limit-login-countries' );
+				echo __( 'Limit Login Countries (DNSBL)', 'limit-login-countries' );
 				?></h2>
 			<form action="<?php echo admin_url( 'options.php' ); ?>" method="post"><?php
 				settings_fields( 'limit-login-countries' );
